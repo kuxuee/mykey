@@ -10,3 +10,5 @@ android/.gradle/
 android/.kotlin/
 android/local.properties
 android/key.properties
+/target/
+/dist/

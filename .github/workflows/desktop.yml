@@ -1,0 +1,19 @@
+name: GPUI desktop checks
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable-x86_64-pc-windows-msvc
+          components: rustfmt
+      - run: cargo fmt --check
+      - run: cargo test --no-default-features --locked
+      - run: cargo build --locked

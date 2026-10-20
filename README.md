@@ -1,93 +1,89 @@
 # MyKey
 
-一个面向 `Windows / Android / iOS` 的 Flutter 新工程，密码算法使用纯 Dart 重写，目标行为对齐 `github.com/cloudflare/gokey` 的 `GetPass` 逻辑。
+MyKey 根据主密码和服务标识，在本地生成确定性密码。Windows 桌面主入口已迁移为
+**Rust + GPUI 0.2.2**，界面直接由 GPU 绘制，不依赖 Flutter 或 WebView。
+当前仓库的旧实现实际是 Flutter，并非 Tauri。
 
-## 目录结构
+## Windows 开发
 
-```text
-.
-|-- lib/
-|   |-- main.dart
-|   `-- src/
-|       `-- mykey_service.dart
-|-- test/
-|   |-- mykey_service_test.dart
-|   `-- widget_test.dart
-|-- windows/
-|   |-- flutter/
-|   |-- runner/
-|   `-- CMakeLists.txt
-|-- pubspec.yaml
-`-- README.md
+需要完整的 Rust **MSVC** 工具链、Visual Studio 2022 的「使用 C++ 的桌面开发」
+工作负载与 Windows SDK，以及支持 DirectX 11 的图形环境。
+
+```powershell
+rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal
+cargo +stable-x86_64-pc-windows-msvc run --locked
+```
+
+构建发布版：
+
+```powershell
+cargo +stable-x86_64-pc-windows-msvc build --release --locked
+```
+
+程序位于 `target/release/mykey.exe`。打包时附带 `LICENSE`、
+`THIRD_PARTY_NOTICES.md` 和 `licenses/`。
+
+本机如果沿用已有的 GNU Rust 工具链与 MSYS2 MinGW，也可以在当前 PowerShell 会话中指定
+完整的 GCC（仅有 Rust 自带的链接器而缺少 MinGW 库时不能完成链接）：
+
+```powershell
+$env:CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = 'C:/msys64/mingw64/bin/gcc.exe'
+$env:PATH = 'C:/msys64/mingw64/bin;' + $env:PATH
+cargo run --locked
 ```
 
 ## 功能
 
-- 主密码输入框
-- 服务标识输入框
-- 结果只读输入框
-- 计算按钮
-- 复制密码按钮
+- 中文深色界面，主密码默认隐藏，可切换显隐。
+- 服务标识输入、只读结果、后台计算、一键复制与清空。
+- 修改任意输入会清除旧结果，避免复制与当前输入不对应的密码。
+- Enter / Ctrl+Enter 生成；Tab / Shift+Tab 切换输入框和按钮。
+- 支持 Unicode 输入、选择、粘贴和输入法组合文本。
+- 不向磁盘保存主密码和生成结果；复制后的密码保留在系统剪贴板中。
 
-## 算法说明
+## 算法兼容性
 
-Dart 实现位于 `lib/src/mykey_service.dart`，主要复刻了 gokey 的密码推导流程：
+Rust 实现位于 `src/lib.rs`，保留旧 Dart 版本行为：
 
-1. `PBKDF2-HMAC-SHA256(password, realm + "-pass", 4096, 32 bytes)`
-2. 以结果作为 `AES-256-CTR` 的 key，使用全 0 的 16 字节计数器初值
-3. 从生成的确定性字节流中按 gokey 的 `randRange` 规则取样字符
-4. 持续尝试直到满足密码规则
+1. UTF-8 输入，不裁剪空格、不改变大小写、不做 Unicode 归一化。
+2. `PBKDF2-HMAC-SHA256(master, service + "-pass", 4096, 32 bytes)`。
+3. AES-256-CTR，全零的 16 字节大端初始计数器，从字节流开头取样。
+4. 保留 gokey 的拒绝取样和字符顺序，输出 16 位密码，至少含一个大写字母、
+   小写字母、数字和特殊字符；允许的特殊字符为 `!@#$%^&*()-_=+?`。
 
-默认密码规则：
+密码兼容性测试可独立运行，不需要 GPUI 图形环境：
 
-- 长度 `16`
-- 至少 `1` 个大写字母
-- 至少 `1` 个小写字母
-- 至少 `1` 个数字
-- 至少 `1` 个特殊字符
-- 允许的特殊字符：`!@#$%^&*()-_=+?`
+```powershell
+cargo +stable-x86_64-pc-windows-msvc test --no-default-features --locked
+cargo +stable-x86_64-pc-windows-msvc check --locked
+cargo fmt --check
+```
 
-## 本地开发
+测试包含旧版三个 gokey 固定向量、空值校验、Unicode 与空格输入和密码规则。
 
-安装 Flutter 后可直接在仓库根目录执行：
+## 目录
+
+| 路径 | 用途 |
+| --- | --- |
+| `src/main.rs` | GPUI 桌面界面、后台任务、系统剪贴板 |
+| `src/input.rs` | 原生文本输入、密码遮罩、选择与输入法 |
+| `src/lib.rs` | 密码算法与兼容性测试 |
+| `src/text_offsets.rs` | Unicode、Windows 输入法与密码遮罩位置转换 |
+| `Cargo.toml` / `Cargo.lock` | Rust 入口与依赖锁定 |
+| `lib/`、`test/`、`android/`、`windows/` | 保留的旧 Flutter 工程 |
+
+## 移动端与旧 Flutter 工程
+
+本次 GPUI 迁移针对桌面端。Android 继续使用保留的 Flutter 实现，发布工作流仍会构建
+Android APK；Windows 发布改为构建 GPUI 程序。仓库目前没有 iOS 平台工程。
+
+如需运行原 Flutter 工程：
 
 ```powershell
 flutter pub get
 flutter test
-flutter run -d windows
-```
-
-如果已经安装 Android Studio 和 Android SDK，可先检查 Android 环境：
-
-```powershell
-flutter doctor
-```
-
-如需生成 Android APK，可在仓库根目录执行：
-
-```powershell
+flutter run -d android
 flutter build apk --release
 ```
 
-编译产物默认位于：
-
-```text
-build/app/outputs/flutter-apk/app-release.apk
-```
-
-如果需要调试版 APK，可执行：
-
-```powershell
-flutter build apk --debug
-```
-
-如果要运行 Android 或 iOS，再分别补齐对应平台工具链：
-
-- Android Studio / Android SDK（Android APK 已可编译）
-- Xcode（仅 macOS 可构建 iOS）
-
-## 已知说明
-
-- 现在主实现已经切换到 Flutter + 纯 Dart
-- 当前实现不依赖 `gcc`、`cargo` 或 Go 动态库
-- iOS 仍然只能在 macOS 上完成最终构建和签名
+旧 `windows/` 目录仅供 Flutter 回退使用，GPUI 构建不读取该目录。

@@ -1,0 +1,27 @@
+[package]
+name = "mykey"
+version = "0.2.0"
+edition = "2024"
+license = "MIT"
+description = "MyKey deterministic password generator with a native GPUI desktop interface"
+
+[features]
+default = ["desktop"]
+desktop = ["dep:gpui", "dep:unicode-segmentation"]
+
+[[bin]]
+name = "mykey"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[dependencies]
+aes = "0.8.4"
+pbkdf2 = "0.12.2"
+sha2 = "0.10.9"
+zeroize = "1.9"
+gpui = { version = "=0.2.2", optional = true }
+unicode-segmentation = { version = "1.13", optional = true }
+
+[profile.release]
+lto = "thin"
+strip = true

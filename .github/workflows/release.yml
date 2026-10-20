@@ -41,36 +41,37 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
 
   build-windows:
-    name: Build Windows EXE
+    name: Build Windows GPUI EXE
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+      - name: Set up Rust MSVC
+        uses: dtolnay/rust-toolchain@stable
         with:
-          channel: stable
+          toolchain: stable-x86_64-pc-windows-msvc
 
-      - name: Enable Windows desktop
-        run: flutter config --enable-windows-desktop
+      - name: Test password compatibility
+        run: cargo test --no-default-features --locked
 
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Build Windows release
-        run: flutter build windows --release
+      - name: Build GPUI release
+        run: cargo build --release --locked
 
       - name: Package Windows build
         shell: pwsh
-        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath build\mykey-windows-x64.zip
+        run: |
+          New-Item -ItemType Directory -Force dist/mykey | Out-Null
+          Copy-Item target/release/mykey.exe, LICENSE, THIRD_PARTY_NOTICES.md dist/mykey/
+          Copy-Item licenses dist/mykey/ -Recurse
+          Compress-Archive -Path dist/mykey/* -DestinationPath dist/mykey-windows-x64.zip
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: mykey-windows-x64
-          path: build/mykey-windows-x64.zip
+          path: dist/mykey-windows-x64.zip
 
   publish-release:
     name: Publish GitHub Release
